@@ -1,3 +1,4 @@
 # Real knowledge files must stay outside the public repository.
 *.json
 !knowledge.example.json
+!apps_script/appsscript.json
