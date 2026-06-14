@@ -12,7 +12,8 @@ function doGet() {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-function getGeminiStatus() {
+function getGeminiStatus(bridgeToken) {
+  verifyBridgeToken_(bridgeToken);
   const properties = PropertiesService.getScriptProperties();
   return {
     configured: Boolean(properties.getProperty('GEMINI_API_KEY')),
@@ -21,6 +22,7 @@ function getGeminiStatus() {
 }
 
 function generateGeminiDraft(payload) {
+  verifyBridgeToken_(payload && payload.bridge_token);
   const properties = PropertiesService.getScriptProperties();
   const apiKey = properties.getProperty('GEMINI_API_KEY');
   const model = properties.getProperty('GEMINI_MODEL') || DEFAULT_GEMINI_MODEL;
@@ -140,6 +142,33 @@ function generateGeminiDraft(payload) {
       total_tokens: Number(usageMetadata.totalTokenCount || 0)
     }
   };
+}
+
+function verifyBridgeToken_(providedToken) {
+  const expectedToken = PropertiesService
+    .getScriptProperties()
+    .getProperty('BRIDGE_TOKEN');
+  if (!expectedToken || expectedToken.length < 24) {
+    throw new Error('BRIDGE_TOKEN is not configured or is too short.');
+  }
+  const provided = String(providedToken || '');
+  const expectedDigest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    expectedToken,
+    Utilities.Charset.UTF_8
+  );
+  const providedDigest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    provided,
+    Utilities.Charset.UTF_8
+  );
+  let difference = expectedDigest.length ^ providedDigest.length;
+  for (let index = 0; index < expectedDigest.length; index += 1) {
+    difference |= expectedDigest[index] ^ providedDigest[index];
+  }
+  if (difference !== 0) {
+    throw new Error('BRIDGE_TOKEN is invalid.');
+  }
 }
 
 function getAllowedParentOrigin_() {

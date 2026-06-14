@@ -18,6 +18,10 @@
     if (event.source !== window.parent || event.origin !== ALLOWED_ORIGIN) return;
     const message = event.data || {};
     if (message.type === 'ticket-cockpit-ping') {
+      const bridgeToken =
+        message.payload && message.payload.bridge_token
+          ? message.payload.bridge_token
+          : '';
       google.script.run
         .withSuccessHandler((status) => {
           reply(event.source, event.origin, {
@@ -33,7 +37,7 @@
             error: error && error.message ? error.message : String(error)
           });
         })
-        .getGeminiStatus();
+        .getGeminiStatus(bridgeToken);
       return;
     }
     if (message.type !== 'ticket-cockpit-generate') return;

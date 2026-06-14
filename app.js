@@ -6,6 +6,7 @@ let knowledge = null;
 let activeFileHandle = null;
 let activeFallbackFile = null;
 let geminiReady = false;
+let bridgeToken = '';
 let bridgeRequestSequence = 0;
 const bridgePending = new Map();
 
@@ -62,23 +63,35 @@ function sendBridgeMessage(type, payload = {}, timeoutMs = 70000) {
 
 async function connectGeminiBridge() {
   const url = validateBridgeUrl($('geminiBridgeUrl').value.trim());
+  const token = $('geminiBridgeToken').value.trim();
   if (!url) {
     $('geminiStatus').textContent = 'Apps ScriptのウェブアプリURLを入力してください。';
     return;
   }
+  if (token.length < 24) {
+    $('geminiStatus').textContent = 'Script Propertiesと同じ24文字以上のBRIDGE_TOKENを入力してください。';
+    return;
+  }
   geminiReady = false;
+  bridgeToken = '';
   $('connectGeminiBtn').disabled = true;
-  $('geminiStatus').textContent = '接続中です。Googleログイン画面が出た場合はログインしてください。';
+  $('geminiStatus').textContent = '中継トークンを確認中です。';
   const frame = $('geminiBridgeFrame');
   frame.onload = async () => {
     try {
-      const message = await sendBridgeMessage('ticket-cockpit-ping', {}, 20000);
+      const message = await sendBridgeMessage(
+        'ticket-cockpit-ping',
+        { bridge_token: token },
+        20000
+      );
       const status = message.status || {};
       geminiReady = Boolean(status.configured);
+      bridgeToken = geminiReady ? token : '';
       $('geminiStatus').textContent = geminiReady
         ? `接続済み / ${status.model}`
         : '中継には接続しましたが、GEMINI_API_KEYが未設定です。';
     } catch (error) {
+      bridgeToken = '';
       $('geminiStatus').textContent = error.message;
     } finally {
       $('connectGeminiBtn').disabled = false;
@@ -488,6 +501,7 @@ async function analyze() {
   $('analyzeBtn').textContent = 'Geminiで返信作成中';
   try {
     const message = await sendBridgeMessage('ticket-cockpit-generate', {
+      bridge_token: bridgeToken,
       inquiry,
       facility: {
         id: result.analysis.facility.id,
@@ -555,5 +569,7 @@ $('inquiry').addEventListener('keydown', (event) => {
 window.addEventListener('pagehide', () => {
   knowledge = null;
   activeFileHandle = null;
+  bridgeToken = '';
+  $('geminiBridgeToken').value = '';
   activeFallbackFile = null;
 });

@@ -177,6 +177,8 @@
       </div>
       <input class="bridge-input" type="url" id="geminiBridgeUrl" autocomplete="off" spellcheck="false"
         placeholder="https://script.google.com/macros/s/.../exec">
+      <input class="bridge-input" type="password" id="geminiBridgeToken" autocomplete="off" spellcheck="false"
+        placeholder="Script PropertiesのBRIDGE_TOKEN">
       <button class="btn btn-secondary" id="connectGeminiBtn">Geminiへ接続</button>
       <iframe class="hidden" id="geminiBridgeFrame" title="Gemini API bridge"></iframe>
     </div>
@@ -187,7 +189,7 @@
         <label for="inquiry">問い合わせ本文</label>
         <textarea id="inquiry" placeholder="個人を特定できる情報を除いて入力してください。"></textarea>
         <div class="privacy">
-          Gemini接続時は、問い合わせと検索で絞った根拠だけを自分のApps Script経由でGoogleへ送信します。ナレッジ全体は送信・永続保存しません。個人情報らしき値を検出した場合は分析を停止します。
+          Gemini接続時は、問い合わせと検索で絞った根拠だけを自分のApps Script経由でGoogleへ送信します。APIキーと中継トークンはHTMLへ保存しません。個人情報らしき値を検出した場合は分析を停止します。
         </div>
         <div class="controls">
           <div class="control">
