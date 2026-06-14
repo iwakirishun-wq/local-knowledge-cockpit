@@ -69,7 +69,7 @@ function generateGeminiDraft(payload) {
       maxOutputTokens: 2048,
       responseFormat: {
         text: {
-          mimeType: 'application/json',
+          mimeType: 'APPLICATION_JSON',
           schema: schema
         }
       }

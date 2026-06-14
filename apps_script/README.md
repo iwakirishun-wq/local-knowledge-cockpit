@@ -25,3 +25,5 @@ Apps Scriptの「プロジェクトの設定」から次を登録します。
 APIキーと中継トークンはHTML、GitHub、ナレッジJSONへ保存しません。中継トークンはブラウザのタブを閉じると消えます。
 
 コード更新時は「デプロイを管理」から既存デプロイを編集し、バージョンを必ず「新バージョン」にして再デプロイしてください。コードを保存しただけでは`/exec`へ反映されません。
+
+`generation_config.response_format.text.mime_type`のエラーが出る場合は、`Code.gs`の`mimeType`が`APPLICATION_JSON`になっている最新版を登録して再デプロイしてください。
