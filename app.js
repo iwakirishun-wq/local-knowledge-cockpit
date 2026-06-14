@@ -2,6 +2,7 @@
 
 const $ = (id) => document.getElementById(id);
 const EXPECTED_KNOWLEDGE_FILENAME = 'チケット対応ナレッジ.json';
+const BRIDGE_CREDENTIAL_NAME = 'Local Knowledge Cockpit Gemini Bridge';
 let knowledge = null;
 let activeFileHandle = null;
 let activeFallbackFile = null;
@@ -50,6 +51,48 @@ function validateBridgeUrl(value) {
   }
 }
 
+function supportsBridgeCredentialStorage() {
+  return Boolean(
+    window.isSecureContext
+    && navigator.credentials
+    && typeof navigator.credentials.get === 'function'
+    && typeof navigator.credentials.store === 'function'
+    && typeof window.PasswordCredential === 'function'
+  );
+}
+
+async function storeBridgeCredential(url, token) {
+  if (!supportsBridgeCredentialStorage()) return false;
+  const credential = new PasswordCredential({
+    id: url,
+    password: token,
+    name: BRIDGE_CREDENTIAL_NAME
+  });
+  await navigator.credentials.store(credential);
+  return true;
+}
+
+async function restoreBridgeCredential() {
+  if (!supportsBridgeCredentialStorage()) return;
+  try {
+    const credential = await navigator.credentials.get({
+      password: true,
+      mediation: 'optional'
+    });
+    if (!credential || credential.type !== 'password') return;
+    const url = validateBridgeUrl(credential.id);
+    const token = String(credential.password || '').trim();
+    if (!url || token.length < 24) return;
+    $('geminiBridgeUrl').value = url;
+    $('geminiBridgeToken').value = token;
+    $('geminiStatus').textContent = '保存済み設定でGeminiへ再接続しています。';
+    await connectGeminiBridge({ storeCredential: false });
+  } catch {
+    $('geminiStatus').textContent =
+      '保存済み設定を読み込めませんでした。Apps Script中継URLとトークンを入力してください。';
+  }
+}
+
 function sendBridgeMessage(type, payload = {}, timeoutMs = 70000) {
   if (!bridgeWindow) return Promise.reject(new Error('Gemini中継を読み込めません。'));
   const requestId = `request-${Date.now()}-${++bridgeRequestSequence}`;
@@ -79,7 +122,7 @@ function waitForBridgeLoad(timeoutMs = 20000) {
   });
 }
 
-async function connectGeminiBridge() {
+async function connectGeminiBridge(options = {}) {
   const url = validateBridgeUrl($('geminiBridgeUrl').value.trim());
   const token = $('geminiBridgeToken').value.trim();
   if (!url) {
@@ -116,8 +159,16 @@ async function connectGeminiBridge() {
     const status = message.status || {};
     geminiReady = Boolean(status.configured);
     bridgeToken = geminiReady ? token : '';
+    let saved = false;
+    if (geminiReady && options.storeCredential !== false) {
+      try {
+        saved = await storeBridgeCredential(url, token);
+      } catch {
+        saved = false;
+      }
+    }
     $('geminiStatus').textContent = geminiReady
-      ? `接続済み / ${status.model}`
+      ? `接続済み / ${status.model}${saved ? ' / ブラウザに保存済み' : ''}`
       : '中継には接続しましたが、GEMINI_API_KEYが未設定です。';
   } catch (error) {
     bridgeToken = '';
@@ -587,7 +638,7 @@ async function copyDraft() {
 $('selectKnowledgeBtn').addEventListener('click', chooseKnowledgeFile);
 $('reloadKnowledgeBtn').addEventListener('click', reloadKnowledge);
 $('disconnectKnowledgeBtn').addEventListener('click', disconnectKnowledge);
-$('connectGeminiBtn').addEventListener('click', connectGeminiBridge);
+$('connectGeminiBtn').addEventListener('click', () => connectGeminiBridge());
 $('knowledgeFileInput').addEventListener('change', async (event) => {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
@@ -613,3 +664,5 @@ window.addEventListener('pagehide', () => {
   $('geminiBridgeToken').value = '';
   activeFallbackFile = null;
 });
+
+restoreBridgeCredential();

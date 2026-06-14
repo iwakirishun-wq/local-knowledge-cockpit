@@ -175,9 +175,9 @@
         <strong>Gemini API:</strong>
         <span id="geminiStatus">未接続です。自分のApps Script中継URLを入力してください。</span>
       </div>
-      <input class="bridge-input" type="url" id="geminiBridgeUrl" autocomplete="off" spellcheck="false"
+      <input class="bridge-input" type="url" id="geminiBridgeUrl" name="username" autocomplete="username" spellcheck="false"
         placeholder="https://script.google.com/macros/s/.../exec">
-      <input class="bridge-input" type="password" id="geminiBridgeToken" autocomplete="off" spellcheck="false"
+      <input class="bridge-input" type="password" id="geminiBridgeToken" name="password" autocomplete="current-password" spellcheck="false"
         placeholder="Script PropertiesのBRIDGE_TOKEN">
       <button class="btn btn-secondary" id="connectGeminiBtn">Geminiへ接続</button>
       <iframe class="hidden" id="geminiBridgeFrame" title="Gemini API bridge"></iframe>
@@ -189,7 +189,7 @@
         <label for="inquiry">問い合わせ本文</label>
         <textarea id="inquiry" placeholder="個人を特定できる情報を除いて入力してください。"></textarea>
         <div class="privacy">
-          Gemini接続時は、問い合わせと検索で絞った根拠だけを自分のApps Script経由でGoogleへ送信します。APIキーと中継トークンはHTMLへ保存しません。個人情報らしき値を検出した場合は分析を停止します。
+          Gemini接続時は、問い合わせと検索で絞った根拠だけを自分のApps Script経由でGoogleへ送信します。APIキーと中継トークンはHTMLへ保存しません。接続設定はEdgeまたはChromeのパスワード管理へ保存でき、次回は自動接続します。個人情報らしき値を検出した場合は分析を停止します。
         </div>
         <div class="controls">
           <div class="control">
@@ -228,8 +228,8 @@
       <div class="evidence-list" id="evidenceList"></div>
     </section>
 
-    <footer>公開リポジトリにはアプリ本体だけを置きます。選択したファイルはこのタブのメモリ内だけで扱われます。 / App 2026-06-14.4</footer>
+    <footer>公開リポジトリにはアプリ本体だけを置きます。選択したファイルはこのタブのメモリ内だけで扱われます。 / App 2026-06-15.1</footer>
   </main>
-  <script src="app.js?v=20260614.4"></script>
+  <script src="app.js?v=20260615.1"></script>
 </body>
 </html>

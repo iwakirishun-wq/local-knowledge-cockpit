@@ -8,6 +8,7 @@ GitHub Pagesで配信する、ローカルJSON参照とGemini API返信作成用
 - 利用者が明示的に選択したJSONだけを、このタブのメモリ内で処理します。
 - ファイルハンドル、ナレッジ、問い合わせ本文を永続保存しません。
 - Gemini APIキーはGoogle Apps ScriptのScript Propertiesに保存し、HTMLやGitHubへ含めません。
+- Apps Script URLと`BRIDGE_TOKEN`は、接続成功後にEdgeまたはChromeのパスワード管理へ保存できます。アプリのJavaScript、HTML、Web Storageには保存しません。
 - Apps Scriptは公開ウェブアプリとして動作しますが、Script Propertiesの`BRIDGE_TOKEN`が一致しない呼出しを拒否します。
 - 問い合わせと検索で絞った最大8件の根拠だけを、自分のApps Script中継へ送ります。
 - Apps Script中継はiframe内で動作し、許可したGitHub Pagesのオリジンだけを受け付けます。
@@ -29,7 +30,8 @@ GitHub Pagesで配信する、ローカルJSON参照とGemini API返信作成用
 2. Pages URLをEdgeまたはChromeで開きます。
 3. 自分のApps ScriptウェブアプリURLと`BRIDGE_TOKEN`を入力して`Geminiへ接続`を選択します。
 4. Gドライブに同期した`チケット対応ナレッジ.json`を選択します。
-5. ページを再読込した場合は、プライバシー保護のため再接続・再選択します。
+5. 初回接続時にブラウザの保存確認が表示された場合は許可します。次回以降は保存済み設定でGeminiへ自動接続します。
+6. ナレッジJSONは保存しないため、ページを開き直した場合は再選択します。
 
 `knowledge.example.json` は形式確認用です。実データの保存先として使用しないでください。
 実ナレッジJSONはGドライブ側だけに置き、公開リポジトリへ強制追加しないでください。

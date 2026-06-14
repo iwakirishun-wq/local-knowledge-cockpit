@@ -22,7 +22,7 @@ Apps Scriptの「プロジェクトの設定」から次を登録します。
 5. 発行された`https://script.google.com/macros/s/.../exec`を問い合わせ画面へ入力します。
 6. 問い合わせ画面の`中継トークン`にはScript Propertiesへ登録した`BRIDGE_TOKEN`を入力します。
 
-APIキーと中継トークンはHTML、GitHub、ナレッジJSONへ保存しません。中継トークンはブラウザのタブを閉じると消えます。
+APIキーと中継トークンはHTML、GitHub、ナレッジJSONへ保存しません。接続成功後、Apps Script URLと中継トークンはEdgeまたはChromeのパスワード管理へ保存され、次回は自動接続します。Web Storageへ平文保存はしません。
 
 コード更新時は「デプロイを管理」から既存デプロイを編集し、バージョンを必ず「新バージョン」にして再デプロイしてください。コードを保存しただけでは`/exec`へ反映されません。
 
