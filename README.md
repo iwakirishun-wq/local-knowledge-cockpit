@@ -10,7 +10,7 @@ GitHub Pagesで配信する、ローカルJSON参照とGemini API返信作成用
 - Gemini APIキーはGoogle Apps ScriptのScript Propertiesに保存し、HTMLやGitHubへ含めません。
 - Apps Script URLと`BRIDGE_TOKEN`は、接続成功後にEdgeまたはChromeのパスワード管理へ保存できます。アプリのJavaScript、HTML、Web Storageには保存しません。
 - Apps Scriptは公開ウェブアプリとして動作しますが、Script Propertiesの`BRIDGE_TOKEN`が一致しない呼出しを拒否します。
-- 問い合わせと検索で絞った最大8件の根拠だけを、自分のApps Script中継へ送ります。
+- 問い合わせから最大4カテゴリを判定し、各カテゴリの優先根拠を含む最大10件を前後文脈付きで、自分のApps Script中継へ送ります。
 - Apps Script中継はiframe内で動作し、許可したGitHub Pagesのオリジンだけを受け付けます。
 - 個人情報の可能性があるメールアドレス、電話番号、長い番号を検出した場合は分析を停止します。
 - `knowledge.example.json` は架空データだけを収録しています。

@@ -367,21 +367,31 @@ function classifyFacility(inquiry, override) {
 
 function classifyCategory(inquiry) {
   const text = normalize(inquiry);
-  let best = knowledge.general_category;
-  let bestScore = 0;
-  knowledge.categories.forEach((rule) => {
-    const score = (rule.keywords || []).reduce((sum, keyword) => {
-      const term = normalize(keyword);
-      return sum + (term && text.includes(term) ? (term.length >= 4 ? 4 : 2) : 0);
-    }, 0);
-    if (score > bestScore) {
-      best = rule;
-      bestScore = score;
-    }
-  });
+  const scored = knowledge.categories
+    .map((rule, index) => {
+      const score = (rule.keywords || []).reduce((sum, keyword) => {
+        const term = normalize(keyword);
+        return sum + (term && text.includes(term) ? (term.length >= 4 ? 4 : 2) : 0);
+      }, 0);
+      return { rule, score, index };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, 4);
+  const best = scored[0]?.rule || knowledge.general_category;
+  const bestScore = scored[0]?.score || 0;
+  const matchedRules = scored.length ? scored.map((item) => item.rule) : [best];
   return {
     ...best,
-    source_ids: Array.isArray(best.source_ids) ? best.source_ids : [],
+    keywords: [...new Set(matchedRules.flatMap((rule) => rule.keywords || []))],
+    source_ids: [...new Set(matchedRules.flatMap((rule) => rule.source_ids || []))],
+    human_review: matchedRules.some((rule) => Boolean(rule.human_review)),
+    matched_categories: scored.map((item) => ({
+      id: item.rule.id,
+      label: item.rule.label,
+      score: item.score,
+      source_ids: item.rule.source_ids || []
+    })),
     confidence: bestScore >= 4 ? 'high' : bestScore ? 'medium' : 'low'
   };
 }
@@ -409,40 +419,93 @@ function queryTerms(inquiry, category) {
 
 function scoreSource(source, facility, category, terms) {
   let score = 0;
-  if (category.source_ids.includes(source.source_id)) score += 80;
-  if (normalize(source.search_text).includes(normalize(category.label))) score += 20;
+  let relevant = category.source_ids.includes(source.source_id);
+  if (relevant) score += 80;
+  const labels = category.matched_categories?.length
+    ? category.matched_categories.map((item) => item.label)
+    : [category.label];
+  labels.forEach((label, index) => {
+    if (normalize(source.search_text).includes(normalize(label))) {
+      relevant = true;
+      score += index === 0 ? 20 : 10;
+    }
+  });
+  let termScore = 0;
+  terms.forEach((term) => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const count = (normalize(source.search_text).match(new RegExp(escaped, 'g')) || []).length;
+    if (count) {
+      relevant = true;
+      termScore += Math.min(12, 3 + count * 2);
+    }
+  });
+  if (!relevant) return 0;
   if (facility.id !== 'unknown') {
     if (source.facility === facility.id) score += 18;
     else if (source.facility && source.facility !== 'common') score -= 25;
   }
   if (source.source_type === 'official') score += 8;
-  terms.forEach((term) => {
-    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const count = (normalize(source.search_text).match(new RegExp(escaped, 'g')) || []).length;
-    if (count) score += Math.min(12, 3 + count * 2);
-  });
-  return score;
+  return score + termScore;
 }
 
-function sourcePoints(source, terms) {
-  return (source.segments || [])
+function sourcePoints(source, terms, limit = 6) {
+  const segments = source.segments || [];
+  const ranked = segments
     .map((point, index) => ({
       point,
       index,
       score: terms.reduce((sum, term) => sum + (normalize(point).includes(term) ? 4 : 0), 0)
     }))
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, 4)
-    .map((item) => item.point);
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+  const selected = new Set();
+  for (const item of ranked) {
+    for (const index of [item.index, item.index - 1, item.index + 1]) {
+      if (index >= 0 && index < segments.length) selected.add(index);
+      if (selected.size >= limit) break;
+    }
+    if (selected.size >= limit) break;
+  }
+  return [...selected].sort((a, b) => a - b).map((index) => segments[index]);
 }
 
 function searchSources(inquiry, facility, category) {
   const terms = queryTerms(inquiry, category);
-  return knowledge.sources
+  const ranked = knowledge.sources
     .map((source) => ({ ...source, score: scoreSource(source, facility, category, terms) }))
     .filter((source) => source.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 6)
+    .sort((a, b) => b.score - a.score);
+  const selected = [];
+  const selectedIds = new Set();
+  (category.matched_categories || []).forEach((matchedCategory) => {
+    const requiredIds = new Set(matchedCategory.source_ids || []);
+    const candidates = ranked.filter((source) => (
+      requiredIds.has(source.source_id) && !selectedIds.has(source.source_id)
+    ));
+    const preferred = [
+      ...candidates.filter((source) => source.source_type !== 'official').slice(0, 1),
+      ...candidates.filter((source) => source.source_type === 'official').slice(0, 1),
+      ...candidates
+    ];
+    let added = 0;
+    preferred.forEach((source) => {
+      if (
+        selected.length < 10
+        && added < 2
+        && !selectedIds.has(source.source_id)
+      ) {
+        selected.push(source);
+        selectedIds.add(source.source_id);
+        added += 1;
+      }
+    });
+  });
+  ranked.forEach((source) => {
+    if (selected.length < 10 && !selectedIds.has(source.source_id)) {
+      selected.push(source);
+      selectedIds.add(source.source_id);
+    }
+  });
+  return selected
     .map((source) => ({ ...source, points: sourcePoints(source, terms) }));
 }
 
@@ -598,11 +661,12 @@ async function analyze() {
       },
       category: {
         id: result.analysis.category.id,
-        label: result.analysis.category.label
+        label: result.analysis.category.label,
+        matched_categories: result.analysis.category.matched_categories || []
       },
       language: result.analysis.language,
       requires_human_review: result.analysis.requires_human_review,
-      evidence: result.evidence.slice(0, 8).map((item) => ({
+      evidence: result.evidence.slice(0, 10).map((item) => ({
         source_id: item.source_id,
         title: item.title,
         url: item.url,
