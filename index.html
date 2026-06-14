@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; worker-src 'none'; media-src 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; frame-src https://script.google.com https://script.googleusercontent.com https://accounts.google.com; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; worker-src 'none'; media-src 'none';">
   <title>ローカルナレッジ・コックピット</title>
   <style>
     :root {
@@ -70,7 +70,7 @@
       border: 1px solid var(--border); border-radius: 12px;
       background: var(--surface-2); color: var(--text); line-height: 1.55;
     }
-    textarea:focus, select:focus {
+    textarea:focus, select:focus, .bridge-input:focus {
       outline: 2px solid color-mix(in srgb, var(--primary) 30%, transparent);
       border-color: var(--primary);
     }
@@ -98,6 +98,10 @@
     .syncbar strong { color: var(--text); }
     .syncbar .sync-status { flex: 1; min-width: 250px; }
     .syncbar .btn { min-height: 36px; padding: 0 12px; }
+    .bridge-input {
+      width: min(420px, 100%); min-height: 36px; border: 1px solid var(--border);
+      border-radius: 9px; background: var(--surface-2); color: var(--text); padding: 0 10px;
+    }
     .placeholder {
       min-height: 300px; display: grid; place-items: center; text-align: center;
       color: var(--muted); line-height: 1.7;
@@ -150,7 +154,7 @@
     <header>
       <div>
         <h1>ローカルナレッジ・コックピット</h1>
-        <p>自分のGドライブに同期されたナレッジを、ブラウザ内だけで参照します。</p>
+        <p>自分のGドライブに同期されたナレッジを検索し、自分のGemini APIで返信案を作成します。</p>
       </div>
       <div class="status"><span class="dot" id="healthDot"></span><span id="healthText">ナレッジ未接続</span></div>
     </header>
@@ -166,13 +170,24 @@
       <input class="hidden" type="file" id="knowledgeFileInput" accept=".json,application/json">
     </div>
 
+    <div class="syncbar">
+      <div class="sync-status">
+        <strong>Gemini API:</strong>
+        <span id="geminiStatus">未接続です。自分のApps Script中継URLを入力してください。</span>
+      </div>
+      <input class="bridge-input" type="url" id="geminiBridgeUrl" autocomplete="off" spellcheck="false"
+        placeholder="https://script.google.com/macros/s/.../exec">
+      <button class="btn btn-secondary" id="connectGeminiBtn">Geminiへ接続</button>
+      <iframe class="hidden" id="geminiBridgeFrame" title="Gemini API bridge"></iframe>
+    </div>
+
     <div class="grid">
       <section class="card">
         <h2>1. 問い合わせを入力</h2>
         <label for="inquiry">問い合わせ本文</label>
         <textarea id="inquiry" placeholder="個人を特定できる情報を除いて入力してください。"></textarea>
         <div class="privacy">
-          入力内容とナレッジは外部送信・永続保存しません。メールアドレス、電話番号、注文番号などを検出した場合は分析を停止します。
+          Gemini接続時は、問い合わせと検索で絞った根拠だけを自分のApps Script経由でGoogleへ送信します。ナレッジ全体は送信・永続保存しません。個人情報らしき値を検出した場合は分析を停止します。
         </div>
         <div class="controls">
           <div class="control">

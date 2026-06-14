@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+</head>
+<body>
+<script>
+  'use strict';
+
+  const ALLOWED_ORIGIN = <?!= JSON.stringify(allowedOrigin) ?>;
+
+  function reply(target, origin, message) {
+    target.postMessage(message, origin);
+  }
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== window.parent || event.origin !== ALLOWED_ORIGIN) return;
+    const message = event.data || {};
+    if (message.type === 'ticket-cockpit-ping') {
+      google.script.run
+        .withSuccessHandler((status) => {
+          reply(event.source, event.origin, {
+            type: 'ticket-cockpit-ready',
+            requestId: message.requestId,
+            status
+          });
+        })
+        .withFailureHandler((error) => {
+          reply(event.source, event.origin, {
+            type: 'ticket-cockpit-error',
+            requestId: message.requestId,
+            error: error && error.message ? error.message : String(error)
+          });
+        })
+        .getGeminiStatus();
+      return;
+    }
+    if (message.type !== 'ticket-cockpit-generate') return;
+    google.script.run
+      .withSuccessHandler((draft) => {
+        reply(event.source, event.origin, {
+          type: 'ticket-cockpit-result',
+          requestId: message.requestId,
+          draft
+        });
+      })
+      .withFailureHandler((error) => {
+        reply(event.source, event.origin, {
+          type: 'ticket-cockpit-error',
+          requestId: message.requestId,
+          error: error && error.message ? error.message : String(error)
+        });
+      })
+      .generateGeminiDraft(message.payload);
+  });
+</script>
+</body>
+</html>

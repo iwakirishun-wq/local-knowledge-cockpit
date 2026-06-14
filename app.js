@@ -4,6 +4,9 @@ const $ = (id) => document.getElementById(id);
 let knowledge = null;
 let activeFileHandle = null;
 let activeFallbackFile = null;
+let geminiReady = false;
+let bridgeRequestSequence = 0;
+const bridgePending = new Map();
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({
@@ -28,6 +31,74 @@ function safeExternalUrl(value) {
     return '';
   }
 }
+
+function validateBridgeUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:'
+      && url.hostname === 'script.google.com'
+      && /^\/macros\/s\/[^/]+\/exec$/.test(url.pathname)
+      ? url.href
+      : '';
+  } catch {
+    return '';
+  }
+}
+
+function sendBridgeMessage(type, payload = {}, timeoutMs = 70000) {
+  const frame = $('geminiBridgeFrame');
+  if (!frame.contentWindow) return Promise.reject(new Error('Gemini中継を読み込めません。'));
+  const requestId = `request-${Date.now()}-${++bridgeRequestSequence}`;
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      bridgePending.delete(requestId);
+      reject(new Error('Gemini中継が応答しません。ログイン状態とデプロイ設定を確認してください。'));
+    }, timeoutMs);
+    bridgePending.set(requestId, { resolve, reject, timeout });
+    frame.contentWindow.postMessage({ type, requestId, payload }, '*');
+  });
+}
+
+async function connectGeminiBridge() {
+  const url = validateBridgeUrl($('geminiBridgeUrl').value.trim());
+  if (!url) {
+    $('geminiStatus').textContent = 'Apps ScriptのウェブアプリURLを入力してください。';
+    return;
+  }
+  geminiReady = false;
+  $('connectGeminiBtn').disabled = true;
+  $('geminiStatus').textContent = '接続中です。Googleログイン画面が出た場合はログインしてください。';
+  const frame = $('geminiBridgeFrame');
+  frame.onload = async () => {
+    try {
+      const message = await sendBridgeMessage('ticket-cockpit-ping', {}, 20000);
+      const status = message.status || {};
+      geminiReady = Boolean(status.configured);
+      $('geminiStatus').textContent = geminiReady
+        ? `接続済み / ${status.model}`
+        : '中継には接続しましたが、GEMINI_API_KEYが未設定です。';
+    } catch (error) {
+      $('geminiStatus').textContent = error.message;
+    } finally {
+      $('connectGeminiBtn').disabled = false;
+    }
+  };
+  frame.src = url;
+}
+
+window.addEventListener('message', (event) => {
+  if (event.source !== $('geminiBridgeFrame').contentWindow) return;
+  const message = event.data || {};
+  const pending = bridgePending.get(message.requestId);
+  if (!pending) return;
+  window.clearTimeout(pending.timeout);
+  bridgePending.delete(message.requestId);
+  if (message.type === 'ticket-cockpit-error') {
+    pending.reject(new Error(message.error || 'Gemini中継でエラーが発生しました。'));
+  } else {
+    pending.resolve(message);
+  }
+});
 
 function validateKnowledge(data) {
   return Boolean(
@@ -322,10 +393,15 @@ function analyzeLocal(inquiry, facilityOverride) {
   };
 }
 
-function renderAlerts(reasons) {
-  $('alerts').innerHTML = reasons.length
-    ? `<div class="alert warn"><strong>確認事項</strong><ul>${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul></div>`
-    : '';
+function renderAlerts(reasons, aiError = '') {
+  const blocks = [];
+  if (reasons.length) {
+    blocks.push(`<div class="alert warn"><strong>確認事項</strong><ul>${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul></div>`);
+  }
+  if (aiError) {
+    blocks.push(`<div class="alert warn"><strong>Gemini API:</strong> ${escapeHtml(aiError)} 根拠検索による定型下書きを表示しています。</div>`);
+  }
+  $('alerts').innerHTML = blocks.join('');
 }
 
 function renderEvidence(items) {
@@ -359,11 +435,16 @@ function renderResult(data) {
     `<span class="badge">${escapeHtml(analysis.category.label)}</span>`,
     `<span class="badge">${analysis.language === 'en' ? '英語' : '日本語'}</span>`,
     `<span class="badge ${analysis.requires_human_review ? 'danger' : 'ok'}">${analysis.requires_human_review ? '人間確認が必要' : '通常確認'}</span>`,
-    '<span class="badge ok">ブラウザ内処理</span>'
+    `<span class="badge ok">${escapeHtml(data.draft.mode || '根拠検索のみ')}</span>`
   ].join('');
-  renderAlerts(analysis.review_reasons);
+  renderAlerts(analysis.review_reasons, data.ai_error || '');
   $('draft').value = data.draft.customer_reply;
-  $('internalNote').textContent = data.draft.internal_note;
+  $('internalNote').textContent = [
+    data.draft.internal_note,
+    data.draft.usage?.total_tokens
+      ? `API使用量: 入力 ${data.draft.usage.input_tokens} / 出力 ${data.draft.usage.output_tokens} tokens`
+      : ''
+  ].filter(Boolean).join('\n');
   renderEvidence(data.evidence);
 }
 
@@ -378,7 +459,7 @@ function renderSensitiveBlock(types) {
   $('evidenceSection').classList.add('hidden');
 }
 
-function analyze() {
+async function analyze() {
   if (!knowledge) return;
   const inquiry = $('inquiry').value.trim();
   if (!inquiry) {
@@ -390,7 +471,46 @@ function analyze() {
     renderSensitiveBlock(sensitive);
     return;
   }
-  renderResult(analyzeLocal(inquiry, $('facility').value));
+  const result = analyzeLocal(inquiry, $('facility').value);
+  result.draft.mode = '根拠検索のみ';
+  renderResult(result);
+  if (!geminiReady) {
+    result.ai_error = 'Gemini中継が未接続です。';
+    renderResult(result);
+    return;
+  }
+  $('analyzeBtn').disabled = true;
+  $('analyzeBtn').textContent = 'Geminiで返信作成中';
+  try {
+    const message = await sendBridgeMessage('ticket-cockpit-generate', {
+      inquiry,
+      facility: {
+        id: result.analysis.facility.id,
+        label: result.analysis.facility.label
+      },
+      category: {
+        id: result.analysis.category.id,
+        label: result.analysis.category.label
+      },
+      language: result.analysis.language,
+      requires_human_review: result.analysis.requires_human_review,
+      evidence: result.evidence.slice(0, 8).map((item) => ({
+        source_id: item.source_id,
+        title: item.title,
+        url: item.url,
+        fetched_at: item.fetched_at,
+        points: item.points
+      }))
+    });
+    result.draft = message.draft;
+    result.ai_error = '';
+  } catch (error) {
+    result.ai_error = error.message;
+  } finally {
+    $('analyzeBtn').disabled = false;
+    $('analyzeBtn').textContent = '根拠検索と返信作成';
+  }
+  renderResult(result);
 }
 
 async function copyDraft() {
@@ -410,6 +530,7 @@ async function copyDraft() {
 $('selectKnowledgeBtn').addEventListener('click', chooseKnowledgeFile);
 $('reloadKnowledgeBtn').addEventListener('click', reloadKnowledge);
 $('disconnectKnowledgeBtn').addEventListener('click', disconnectKnowledge);
+$('connectGeminiBtn').addEventListener('click', connectGeminiBridge);
 $('knowledgeFileInput').addEventListener('change', async (event) => {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
