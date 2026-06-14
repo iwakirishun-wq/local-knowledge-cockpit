@@ -1,6 +1,7 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
+const EXPECTED_KNOWLEDGE_FILENAME = 'チケット対応ナレッジ.json';
 let knowledge = null;
 let activeFileHandle = null;
 let activeFallbackFile = null;
@@ -131,7 +132,7 @@ function setConnectedStatus(file) {
   $('healthDot').className = 'dot ok';
   $('healthText').textContent = `ローカル参照 / 根拠 ${knowledge.sources.length}件`;
   $('knowledgeStatus').textContent =
-    `${file.name} / ${knowledge.sources.length}件 / ${formatBuiltAt(knowledge.built_at)}`;
+    `Gドライブ選択ファイル: ${file.name} / ${knowledge.sources.length}件 / ${formatBuiltAt(knowledge.built_at)}`;
   $('analyzeBtn').disabled = false;
   $('analyzeBtn').textContent = '根拠検索と返信作成';
   $('reloadKnowledgeBtn').classList.remove('hidden');
@@ -148,6 +149,9 @@ function clearResult(message) {
 }
 
 async function applyKnowledgeFile(file) {
+  if (file.name !== EXPECTED_KNOWLEDGE_FILENAME) {
+    throw new Error(`選択するファイルは「${EXPECTED_KNOWLEDGE_FILENAME}」です。`);
+  }
   const parsed = JSON.parse(await file.text());
   if (!validateKnowledge(parsed)) {
     throw new Error('対応していないナレッジJSONです。');
@@ -213,7 +217,8 @@ function disconnectKnowledge() {
   $('disconnectKnowledgeBtn').classList.add('hidden');
   $('healthDot').className = 'dot';
   $('healthText').textContent = 'ナレッジ未接続';
-  $('knowledgeStatus').textContent = '切断しました。ブラウザ内の入力とナレッジ参照を消去しました。';
+  $('knowledgeStatus').textContent =
+    `切断しました。Gドライブ上の「${EXPECTED_KNOWLEDGE_FILENAME}」を再選択してください。`;
   clearResult('この公開アプリにはナレッジを内蔵していません。');
 }
 
