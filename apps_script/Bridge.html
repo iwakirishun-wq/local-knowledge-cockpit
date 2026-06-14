@@ -9,13 +9,22 @@
   'use strict';
 
   const ALLOWED_ORIGIN = <?!= JSON.stringify(allowedOrigin) ?>;
+  const BRIDGE_CHANNEL = <?!= JSON.stringify(bridgeChannel) ?>;
+
+  window.top.postMessage(
+    {
+      type: 'ticket-cockpit-bridge-loaded',
+      channel: BRIDGE_CHANNEL
+    },
+    ALLOWED_ORIGIN
+  );
 
   function reply(target, origin, message) {
     target.postMessage(message, origin);
   }
 
   window.addEventListener('message', (event) => {
-    if (event.source !== window.parent || event.origin !== ALLOWED_ORIGIN) return;
+    if (event.source !== window.top || event.origin !== ALLOWED_ORIGIN) return;
     const message = event.data || {};
     if (message.type === 'ticket-cockpit-ping') {
       const bridgeToken =

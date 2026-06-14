@@ -7,8 +7,11 @@ let activeFileHandle = null;
 let activeFallbackFile = null;
 let geminiReady = false;
 let bridgeToken = '';
+let bridgeWindow = null;
+let bridgeChannel = '';
 let bridgeRequestSequence = 0;
 const bridgePending = new Map();
+let bridgeLoadPending = null;
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({
@@ -48,8 +51,7 @@ function validateBridgeUrl(value) {
 }
 
 function sendBridgeMessage(type, payload = {}, timeoutMs = 70000) {
-  const frame = $('geminiBridgeFrame');
-  if (!frame.contentWindow) return Promise.reject(new Error('Gemini中継を読み込めません。'));
+  if (!bridgeWindow) return Promise.reject(new Error('Gemini中継を読み込めません。'));
   const requestId = `request-${Date.now()}-${++bridgeRequestSequence}`;
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
@@ -57,7 +59,23 @@ function sendBridgeMessage(type, payload = {}, timeoutMs = 70000) {
       reject(new Error('Gemini中継が応答しません。ログイン状態とデプロイ設定を確認してください。'));
     }, timeoutMs);
     bridgePending.set(requestId, { resolve, reject, timeout });
-    frame.contentWindow.postMessage({ type, requestId, payload }, '*');
+    bridgeWindow.postMessage({ type, requestId, payload }, '*');
+  });
+}
+
+function waitForBridgeLoad(timeoutMs = 20000) {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      bridgeLoadPending = null;
+      reject(new Error('Gemini中継の内部画面が応答しません。GASを最新版で再デプロイしてください。'));
+    }, timeoutMs);
+    bridgeLoadPending = {
+      resolve: () => {
+        window.clearTimeout(timeout);
+        bridgeLoadPending = null;
+        resolve();
+      }
+    };
   });
 }
 
@@ -74,35 +92,55 @@ async function connectGeminiBridge() {
   }
   geminiReady = false;
   bridgeToken = '';
+  bridgeWindow = null;
+  bridgeChannel = (
+    window.crypto && typeof window.crypto.randomUUID === 'function'
+      ? window.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  ).replace(/[^A-Za-z0-9_-]/g, '');
   $('connectGeminiBtn').disabled = true;
   $('geminiStatus').textContent = '中継トークンを確認中です。';
   const frame = $('geminiBridgeFrame');
-  frame.onload = async () => {
-    try {
-      const message = await sendBridgeMessage(
-        'ticket-cockpit-ping',
-        { bridge_token: token },
-        20000
-      );
-      const status = message.status || {};
-      geminiReady = Boolean(status.configured);
-      bridgeToken = geminiReady ? token : '';
-      $('geminiStatus').textContent = geminiReady
-        ? `接続済み / ${status.model}`
-        : '中継には接続しましたが、GEMINI_API_KEYが未設定です。';
-    } catch (error) {
-      bridgeToken = '';
-      $('geminiStatus').textContent = error.message;
-    } finally {
-      $('connectGeminiBtn').disabled = false;
-    }
-  };
-  frame.src = url;
+  frame.onload = null;
+  const loaded = waitForBridgeLoad();
+  const bridgeUrl = new URL(url);
+  bridgeUrl.searchParams.set('channel', bridgeChannel);
+  frame.src = bridgeUrl.href;
+  try {
+    await loaded;
+    const message = await sendBridgeMessage(
+      'ticket-cockpit-ping',
+      { bridge_token: token },
+      20000
+    );
+    const status = message.status || {};
+    geminiReady = Boolean(status.configured);
+    bridgeToken = geminiReady ? token : '';
+    $('geminiStatus').textContent = geminiReady
+      ? `接続済み / ${status.model}`
+      : '中継には接続しましたが、GEMINI_API_KEYが未設定です。';
+  } catch (error) {
+    bridgeToken = '';
+    bridgeWindow = null;
+    bridgeChannel = '';
+    $('geminiStatus').textContent = error.message;
+  } finally {
+    $('connectGeminiBtn').disabled = false;
+  }
 }
 
 window.addEventListener('message', (event) => {
-  if (event.source !== $('geminiBridgeFrame').contentWindow) return;
   const message = event.data || {};
+  if (
+    message.type === 'ticket-cockpit-bridge-loaded'
+    && message.channel === bridgeChannel
+    && /^https:\/\/(?:[a-z0-9-]+\.)*googleusercontent\.com$/i.test(event.origin)
+  ) {
+    bridgeWindow = event.source;
+    if (bridgeLoadPending) bridgeLoadPending.resolve();
+    return;
+  }
+  if (!bridgeWindow || event.source !== bridgeWindow) return;
   const pending = bridgePending.get(message.requestId);
   if (!pending) return;
   window.clearTimeout(pending.timeout);
@@ -570,6 +608,8 @@ window.addEventListener('pagehide', () => {
   knowledge = null;
   activeFileHandle = null;
   bridgeToken = '';
+  bridgeWindow = null;
+  bridgeChannel = '';
   $('geminiBridgeToken').value = '';
   activeFallbackFile = null;
 });

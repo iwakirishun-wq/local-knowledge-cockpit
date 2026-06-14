@@ -3,13 +3,24 @@ const DEFAULT_PARENT_ORIGIN = 'https://iwakirishun-wq.github.io';
 const MAX_INQUIRY_CHARS = 12000;
 const MAX_EVIDENCE = 8;
 
-function doGet() {
+function doGet(event) {
   const template = HtmlService.createTemplateFromFile('Bridge');
   template.allowedOrigin = getAllowedParentOrigin_();
+  template.bridgeChannel = normalizeBridgeChannel_(
+    event && event.parameter && event.parameter.channel
+  );
   return template
     .evaluate()
     .setTitle('Ticket Support Gemini Bridge')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function normalizeBridgeChannel_(value) {
+  const channel = String(value || '');
+  if (!/^[A-Za-z0-9_-]{16,100}$/.test(channel)) {
+    throw new Error('Invalid bridge channel.');
+  }
+  return channel;
 }
 
 function getGeminiStatus(bridgeToken) {
