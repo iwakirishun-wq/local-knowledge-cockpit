@@ -6,6 +6,8 @@ const BRIDGE_CREDENTIAL_NAME = 'Local Knowledge Cockpit Gemini Bridge';
 let knowledge = null;
 let activeFileHandle = null;
 let activeFallbackFile = null;
+let lastResult = null;
+let generatedDraft = '';
 let geminiReady = false;
 let bridgeToken = '';
 let bridgeWindow = null;
@@ -232,7 +234,8 @@ function populateFacilityOptions() {
 
 function setConnectedStatus(file) {
   $('healthDot').className = 'dot ok';
-  $('healthText').textContent = `ローカル参照 / 根拠 ${knowledge.sources.length}件`;
+  $('healthText').textContent =
+    `ローカル参照 / 根拠 ${knowledge.sources.length}件 / 学習 ${(knowledge.feedback || []).length}件`;
   $('knowledgeStatus').textContent =
     `Gドライブ選択ファイル: ${file.name} / ${knowledge.sources.length}件 / ${formatBuiltAt(knowledge.built_at)}`;
   $('analyzeBtn').disabled = false;
@@ -258,6 +261,7 @@ async function applyKnowledgeFile(file) {
   if (!validateKnowledge(parsed)) {
     throw new Error('対応していないナレッジJSONです。');
   }
+  if (!Array.isArray(parsed.feedback)) parsed.feedback = [];
   knowledge = parsed;
   setConnectedStatus(file);
   clearResult('ナレッジを接続しました。個人を特定できる情報を除いて問い合わせを入力してください。');
@@ -306,6 +310,7 @@ async function reloadKnowledge() {
 
 function disconnectKnowledge() {
   knowledge = null;
+  lastResult = null;
   activeFileHandle = null;
   activeFallbackFile = null;
   $('knowledgeFileInput').value = '';
@@ -445,7 +450,40 @@ function scoreSource(source, facility, category, terms) {
     else if (source.facility && source.facility !== 'common') score -= 25;
   }
   if (source.source_type === 'official') score += 8;
+  if (source.source_type === 'feedback') score += 70;
   return score + termScore;
+}
+
+function feedbackSources() {
+  return (knowledge.feedback || [])
+    .filter((item) => item && item.active !== false && item.corrected_reply)
+    .map((item) => {
+      const segments = [
+        item.correction_note
+          ? `【過去の担当者修正・優先】${item.correction_note}`
+          : '【過去の担当者修正・優先】承認済みの対応例です。',
+        item.inquiry_pattern ? `類似問い合わせ: ${item.inquiry_pattern}` : '',
+        `承認済み返信例:\n${item.corrected_reply}`
+      ].filter(Boolean);
+      return {
+        source_id: `feedback:${item.feedback_id}`,
+        title: `修正フィードバック / ${item.category_label || '一般問い合わせ'}`,
+        source_type: 'feedback',
+        facility: item.facility_id || 'common',
+        category: item.category_id || '',
+        url: '',
+        fetched_at: item.created_at || '',
+        age_days: null,
+        stale: false,
+        segments,
+        search_text: normalize([
+          item.inquiry_pattern,
+          item.correction_note,
+          item.corrected_reply,
+          ...(item.match_terms || [])
+        ].filter(Boolean).join('\n'))
+      };
+    });
 }
 
 function sourcePoints(source, terms, limit = 6) {
@@ -470,12 +508,16 @@ function sourcePoints(source, terms, limit = 6) {
 
 function searchSources(inquiry, facility, category) {
   const terms = queryTerms(inquiry, category);
-  const ranked = knowledge.sources
+  const ranked = [...feedbackSources(), ...knowledge.sources]
     .map((source) => ({ ...source, score: scoreSource(source, facility, category, terms) }))
     .filter((source) => source.score > 0)
     .sort((a, b) => b.score - a.score);
   const selected = [];
   const selectedIds = new Set();
+  ranked.filter((source) => source.source_type === 'feedback').slice(0, 2).forEach((source) => {
+    selected.push(source);
+    selectedIds.add(source.source_id);
+  });
   (category.matched_categories || []).forEach((matchedCategory) => {
     const requiredIds = new Set(matchedCategory.source_ids || []);
     const candidates = ranked.filter((source) => (
@@ -609,6 +651,8 @@ function renderResult(data) {
   ].join('');
   renderAlerts(analysis.review_reasons, data.ai_error || '');
   $('draft').value = data.draft.customer_reply;
+  lastResult = data;
+  generatedDraft = data.draft.customer_reply;
   $('internalNote').textContent = [
     data.draft.internal_note,
     data.draft.usage?.total_tokens
@@ -619,6 +663,7 @@ function renderResult(data) {
 }
 
 function renderSensitiveBlock(types) {
+  lastResult = null;
   $('placeholder').classList.add('hidden');
   $('result').classList.remove('hidden');
   $('badges').innerHTML = '<span class="badge danger">分析停止</span>';
@@ -636,6 +681,8 @@ async function analyze() {
     $('inquiry').focus();
     return;
   }
+  $('feedbackNote').value = '';
+  $('feedbackStatus').textContent = '修正した返信案と判断ルールを、選択中のナレッジJSONへ保存します。';
   const sensitive = detectSensitive(inquiry);
   if (sensitive.length) {
     renderSensitiveBlock(sensitive);
@@ -699,6 +746,85 @@ async function copyDraft() {
   window.setTimeout(() => { $('copyBtn').textContent = original; }, 1400);
 }
 
+function feedbackId() {
+  return typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `feedback-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function writeKnowledgeFile() {
+  if (activeFileHandle && typeof activeFileHandle.createWritable === 'function') {
+    let permission = 'granted';
+    if (typeof activeFileHandle.queryPermission === 'function') {
+      permission = await activeFileHandle.queryPermission({ mode: 'readwrite' });
+    }
+    if (permission !== 'granted' && typeof activeFileHandle.requestPermission === 'function') {
+      permission = await activeFileHandle.requestPermission({ mode: 'readwrite' });
+    }
+    if (permission === 'granted') {
+      const writable = await activeFileHandle.createWritable();
+      await writable.write(JSON.stringify(knowledge, null, 2));
+      await writable.close();
+      return '選択中のナレッジJSONへ保存しました。';
+    }
+  }
+  const blob = new Blob([JSON.stringify(knowledge, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = EXPECTED_KNOWLEDGE_FILENAME;
+  link.click();
+  URL.revokeObjectURL(url);
+  return '更新済みJSONをダウンロードしました。Gドライブ上の同名ファイルと置き換えてください。';
+}
+
+async function saveFeedback() {
+  if (!knowledge || !lastResult) return;
+  const inquiry = $('inquiry').value.trim();
+  const correctedReply = $('draft').value.trim();
+  const correctionNote = $('feedbackNote').value.trim();
+  if (!correctionNote || !correctedReply) {
+    $('feedbackStatus').textContent = '修正方針と返信案を入力してください。';
+    return;
+  }
+  const sensitive = detectSensitive(`${inquiry}\n${correctionNote}\n${correctedReply}`);
+  if (sensitive.length) {
+    $('feedbackStatus').textContent = `保存を停止しました。個人情報らしき値を削除してください: ${sensitive.join('、')}`;
+    return;
+  }
+  const category = lastResult.analysis.category;
+  const record = {
+    feedback_id: feedbackId(),
+    created_at: new Date().toISOString(),
+    active: true,
+    facility_id: lastResult.analysis.facility.id,
+    facility_label: lastResult.analysis.facility.label,
+    category_id: category.id,
+    category_label: category.label,
+    inquiry_pattern: inquiry.slice(0, 1200),
+    match_terms: queryTerms(inquiry, category).slice(0, 40),
+    correction_note: correctionNote.slice(0, 1000),
+    corrected_reply: correctedReply.slice(0, 5000),
+    replaced_generated_reply: correctedReply !== generatedDraft,
+    source_ids: (lastResult.evidence || []).map((item) => item.source_id).slice(0, 10)
+  };
+  const existing = (knowledge.feedback || []).filter((item) => !(
+    normalize(item.inquiry_pattern) === normalize(record.inquiry_pattern)
+    && item.category_id === record.category_id
+  ));
+  knowledge.feedback = [...existing, record].slice(-300);
+  $('saveFeedbackBtn').disabled = true;
+  try {
+    const message = await writeKnowledgeFile();
+    $('feedbackStatus').textContent =
+      `${message} 学習データ: ${knowledge.feedback.length}件。次回の類似問い合わせから反映します。`;
+  } catch (error) {
+    $('feedbackStatus').textContent = `保存できませんでした: ${error.message}`;
+  } finally {
+    $('saveFeedbackBtn').disabled = false;
+  }
+}
+
 $('selectKnowledgeBtn').addEventListener('click', chooseKnowledgeFile);
 $('reloadKnowledgeBtn').addEventListener('click', reloadKnowledge);
 $('disconnectKnowledgeBtn').addEventListener('click', disconnectKnowledge);
@@ -716,6 +842,7 @@ $('knowledgeFileInput').addEventListener('change', async (event) => {
 });
 $('analyzeBtn').addEventListener('click', analyze);
 $('copyBtn').addEventListener('click', copyDraft);
+$('saveFeedbackBtn').addEventListener('click', saveFeedback);
 $('inquiry').addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') analyze();
 });
