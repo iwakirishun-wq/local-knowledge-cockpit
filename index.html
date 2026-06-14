@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; worker-src 'none'; media-src 'none';">
+  <title>ローカルナレッジ・コックピット</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3f5f8;
+      --surface: #fff;
+      --surface-2: #f8fafc;
+      --text: #172033;
+      --muted: #667085;
+      --border: #dce2ea;
+      --primary: #2357c6;
+      --primary-soft: #e8efff;
+      --ok: #087a55;
+      --ok-soft: #e7f6f0;
+      --warn: #9a5900;
+      --warn-soft: #fff3db;
+      --danger: #b42318;
+      --danger-soft: #feeceb;
+      --shadow: 0 8px 24px rgba(24, 39, 75, .08);
+      --radius: 16px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --bg: #121721; --surface: #1b2230; --surface-2: #212a3a;
+        --text: #edf1f7; --muted: #aab4c5; --border: #344054;
+        --primary: #84a7ff; --primary-soft: #26385f;
+        --ok: #74d6ae; --ok-soft: #183a31;
+        --warn: #f8bd68; --warn-soft: #45351c;
+        --danger: #ff9b92; --danger-soft: #492523;
+        --shadow: 0 8px 24px rgba(0, 0, 0, .28);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    button, textarea, select, input { font: inherit; }
+    .app { max-width: 1180px; margin: 0 auto; padding: 20px; }
+    header {
+      display: flex; align-items: flex-start; gap: 16px; margin-bottom: 18px;
+    }
+    header h1 { margin: 0; font-size: clamp(1.35rem, 3vw, 2rem); }
+    header p { margin: 5px 0 0; color: var(--muted); }
+    .status {
+      margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
+      color: var(--muted); font-size: .84rem; white-space: nowrap;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #98a2b3; }
+    .dot.ok { background: var(--ok); }
+    .grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 18px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px;
+    }
+    .card h2 { margin: 0 0 12px; font-size: 1.05rem; }
+    label { display: block; font-size: .86rem; font-weight: 650; margin-bottom: 6px; }
+    textarea {
+      width: 100%; min-height: 250px; resize: vertical; padding: 13px;
+      border: 1px solid var(--border); border-radius: 12px;
+      background: var(--surface-2); color: var(--text); line-height: 1.55;
+    }
+    textarea:focus, select:focus {
+      outline: 2px solid color-mix(in srgb, var(--primary) 30%, transparent);
+      border-color: var(--primary);
+    }
+    .privacy { margin-top: 8px; color: var(--muted); font-size: .78rem; line-height: 1.5; }
+    .controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-top: 15px; }
+    .control { min-width: 180px; }
+    select {
+      width: 100%; height: 42px; border: 1px solid var(--border); border-radius: 10px;
+      background: var(--surface-2); color: var(--text); padding: 0 10px;
+    }
+    .btn {
+      border: 0; border-radius: 11px; min-height: 42px; padding: 0 16px;
+      cursor: pointer; font-weight: 700; display: inline-flex; align-items: center;
+      justify-content: center; gap: 7px;
+    }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; margin-left: auto; }
+    .btn-secondary { background: var(--primary-soft); color: var(--primary); }
+    .btn-danger { background: var(--danger-soft); color: var(--danger); }
+    .syncbar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      margin: 0 0 16px; padding: 12px 13px; border: 1px solid var(--border);
+      border-radius: 12px; background: var(--surface); color: var(--muted); font-size: .82rem;
+    }
+    .syncbar strong { color: var(--text); }
+    .syncbar .sync-status { flex: 1; min-width: 250px; }
+    .syncbar .btn { min-height: 36px; padding: 0 12px; }
+    .placeholder {
+      min-height: 300px; display: grid; place-items: center; text-align: center;
+      color: var(--muted); line-height: 1.7;
+    }
+    .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .badge {
+      display: inline-flex; align-items: center; min-height: 28px; padding: 3px 10px;
+      border-radius: 999px; background: var(--primary-soft); color: var(--primary);
+      font-size: .78rem; font-weight: 700;
+    }
+    .badge.ok { background: var(--ok-soft); color: var(--ok); }
+    .badge.warn { background: var(--warn-soft); color: var(--warn); }
+    .badge.danger { background: var(--danger-soft); color: var(--danger); }
+    .alert {
+      border-radius: 12px; padding: 11px 12px; margin: 10px 0;
+      font-size: .84rem; line-height: 1.55;
+    }
+    .alert.warn { background: var(--warn-soft); color: var(--warn); }
+    .alert.danger { background: var(--danger-soft); color: var(--danger); }
+    .alert.ok { background: var(--ok-soft); color: var(--ok); }
+    .alert ul { margin: 5px 0 0; padding-left: 20px; }
+    .draft { min-height: 250px; background: var(--surface-2); margin-top: 8px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 10px; }
+    .section { margin-top: 18px; }
+    .section-title { font-weight: 750; margin: 0 0 9px; }
+    .evidence-list { display: grid; gap: 10px; }
+    .evidence {
+      border: 1px solid var(--border); border-radius: 12px; padding: 13px;
+      background: var(--surface-2);
+    }
+    .evidence-head { display: flex; gap: 10px; align-items: flex-start; }
+    .evidence h3 { margin: 0; font-size: .92rem; line-height: 1.45; }
+    .evidence .meta { color: var(--muted); font-size: .75rem; margin-top: 4px; }
+    .evidence ul { margin: 10px 0 0; padding-left: 20px; font-size: .84rem; line-height: 1.55; }
+    .evidence a { color: var(--primary); }
+    .hidden { display: none !important; }
+    footer { color: var(--muted); font-size: .76rem; text-align: center; padding: 18px 0 6px; }
+    @media (max-width: 800px) {
+      .app { padding: 12px; }
+      .grid { grid-template-columns: 1fr; }
+      header { flex-wrap: wrap; }
+      .status { margin-left: 0; }
+      .btn-primary { width: 100%; margin-left: 0; }
+      .control { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div>
+        <h1>ローカルナレッジ・コックピット</h1>
+        <p>自分のGドライブに同期されたナレッジを、ブラウザ内だけで参照します。</p>
+      </div>
+      <div class="status"><span class="dot" id="healthDot"></span><span id="healthText">ナレッジ未接続</span></div>
+    </header>
+
+    <div class="syncbar">
+      <div class="sync-status">
+        <strong>参照ナレッジ:</strong>
+        <span id="knowledgeStatus">未接続です。Gドライブ上のJSONを選択してください。</span>
+      </div>
+      <button class="btn btn-secondary" id="selectKnowledgeBtn">GドライブのJSONを選択</button>
+      <button class="btn btn-secondary hidden" id="reloadKnowledgeBtn">最新版を再読込</button>
+      <button class="btn btn-danger hidden" id="disconnectKnowledgeBtn">切断して消去</button>
+      <input class="hidden" type="file" id="knowledgeFileInput" accept=".json,application/json">
+    </div>
+
+    <div class="grid">
+      <section class="card">
+        <h2>1. 問い合わせを入力</h2>
+        <label for="inquiry">問い合わせ本文</label>
+        <textarea id="inquiry" placeholder="個人を特定できる情報を除いて入力してください。"></textarea>
+        <div class="privacy">
+          入力内容とナレッジは外部送信・永続保存しません。メールアドレス、電話番号、注文番号などを検出した場合は分析を停止します。
+        </div>
+        <div class="controls">
+          <div class="control">
+            <label for="facility">対象</label>
+            <select id="facility" disabled>
+              <option value="auto">ナレッジ接続後に選択できます</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="analyzeBtn" disabled>先にナレッジを接続</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="placeholder" id="placeholder">
+          この公開アプリにはナレッジを内蔵していません。各利用者が自分のJSONを選択した場合だけ利用できます。
+        </div>
+        <div id="result" class="hidden">
+          <h2>2. 判定と返信案</h2>
+          <div class="badges" id="badges"></div>
+          <div id="alerts"></div>
+          <label for="draft">返信案</label>
+          <textarea class="draft" id="draft"></textarea>
+          <div class="actions">
+            <button class="btn btn-secondary" id="copyBtn">返信案をコピー</button>
+          </div>
+          <div class="section">
+            <div class="section-title">確認メモ</div>
+            <div class="alert ok" id="internalNote"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card section hidden" id="evidenceSection">
+      <h2>3. 参照根拠</h2>
+      <div class="evidence-list" id="evidenceList"></div>
+    </section>
+
+    <footer>公開リポジトリにはアプリ本体だけを置きます。選択したファイルはこのタブのメモリ内だけで扱われます。</footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

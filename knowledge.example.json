@@ -1,0 +1,65 @@
+{
+  "schema": "ticket-support-knowledge-v1",
+  "built_at": "2026-01-01T00:00:00+09:00",
+  "stale_warning_days": 30,
+  "facilities": {
+    "sample_a": {
+      "label": "サンプル会場A",
+      "keywords": ["会場A", "東ゲート"]
+    },
+    "sample_b": {
+      "label": "サンプル会場B",
+      "keywords": ["会場B", "西ゲート"]
+    }
+  },
+  "categories": [
+    {
+      "id": "delivery",
+      "label": "受取方法",
+      "keywords": ["受取", "表示", "共有"],
+      "source_ids": ["sample_delivery"],
+      "human_review": false
+    }
+  ],
+  "general_category": {
+    "id": "general",
+    "label": "一般案内",
+    "keywords": [],
+    "source_ids": ["sample_general"],
+    "human_review": true
+  },
+  "volatile_terms": ["料金", "日時"],
+  "sources": [
+    {
+      "source_id": "sample_delivery",
+      "title": "架空サンプル: 受取方法",
+      "source_type": "sample",
+      "facility": "common",
+      "category": "delivery",
+      "url": "",
+      "fetched_at": "2026-01-01T00:00:00+09:00",
+      "age_days": 0,
+      "stale": false,
+      "segments": [
+        "購入後の案内画面から受取用ページを表示します。",
+        "共有前に対象と有効期限を確認します。"
+      ],
+      "search_text": "受取方法 受取 表示 共有 購入後の案内画面"
+    },
+    {
+      "source_id": "sample_general",
+      "title": "架空サンプル: 一般案内",
+      "source_type": "sample",
+      "facility": "common",
+      "category": "general",
+      "url": "",
+      "fetched_at": "2026-01-01T00:00:00+09:00",
+      "age_days": 0,
+      "stale": false,
+      "segments": [
+        "不明点がある場合は担当者が最新条件を確認します。"
+      ],
+      "search_text": "一般案内 不明点 最新条件"
+    }
+  ]
+}
